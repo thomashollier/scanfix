@@ -20,6 +20,7 @@ void offsetCurve::init(string imagePath){
     updatePathFromPoints();
 }
 
+
 void offsetCurve::draw(){
     dstPath.draw();
     srcPath.draw();
