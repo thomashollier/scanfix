@@ -303,7 +303,6 @@ float offsetCurve::getOffsetFromIndex(int index){
 //
 //--------------------------------------------------------------
 void ofApp::setup(){
-    newSessionRequester();
 
     selectedPoint = -1;
     mode = MOVE;
