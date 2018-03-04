@@ -6,13 +6,26 @@ offsetCurve::offsetCurve(){
 void offsetCurve::init(string imagePath){
     imageFilePath = imagePath;
     image.load(imagePath);
-    //image.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
+    image.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
 
-    float x = image.getWidth()/2;
-    float y=0;
-    int step = x/8;
-    int n = 8;
+    // create session file
+    sessionFile = imageFilePath;
+    string::size_type i = sessionFile.rfind('.', sessionFile.length());
+    string newExt = "xml";
+    if (i != string::npos) {
+        sessionFile.replace(i+1, newExt.length(), newExt);
+    }
     
+    for(int i = 0; i< image.getWidth(); i++)
+        tweaks.push_back(0);
+    
+    float x = -image.getWidth()/2;
+    float y=0;
+    int n = 8;
+    int step = image.getWidth()/n;
+
+    srcPoints.clear();
+    dstPoints.clear();
     for(int i=-1; i<= n+1; i++){
         srcPoints.push_back(ofPoint(x+step*i, y));
         dstPoints.push_back(ofPoint(x+step*i, y+ofRandom(-100,100)));
@@ -116,8 +129,8 @@ string offsetCurve::getImage(){
 }
 
 //--------------------------------------------------------------
-void offsetCurve::saveSession(string filePath, string imagePath){
-    cout << "saving \n";
+void offsetCurve::saveSession(){
+    cout << "------------ Saving session --\n";
     ofxXmlSettings positions;
     positions.addTag("image");
     positions.pushTag("image");
@@ -149,7 +162,15 @@ void offsetCurve::saveSession(string filePath, string imagePath){
         positions.popTag();//pop position
     }
     positions.popTag(); //pop position
-    positions.saveFile(filePath);
+    positions.addTag("tweaks");
+    positions.pushTag("tweaks");
+    for(int i = 0; i<tweaks.size(); i++)
+        positions.addValue("tweak"+to_string(i), tweaks[i]);
+    positions.popTag();//pop position
+    positions.saveFile(sessionFile);
+    
+    
+    cout << "Saved session file: \n\t" << sessionFile << "\nwith image file: \n\t" << imageFilePath << "\n------------------\n";
 }
 
 void offsetCurve::readSession(){
@@ -157,14 +178,14 @@ void offsetCurve::readSession(){
 }
 
 void offsetCurve::readSession(string filePath){
-    cout << "loading session file " << filePath << "\n";
+    cout << "------------ Reading session --\n";
+    sessionFile = filePath;
     ofxXmlSettings settings;
     if(settings.loadFile(filePath)){
         settings.pushTag("image");
         imageFilePath = settings.getValue("path", "foo");
         image.load(imageFilePath);
         image.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
-        cout << "\timage " << imageFilePath << "\n";
         settings.popTag();
         srcPoints.clear();
         settings.pushTag("source");
@@ -177,7 +198,6 @@ void offsetCurve::readSession(string filePath){
             settings.popTag();
         }
         settings.popTag(); //pop position
-        cout << "\t" << numberOfSavedPoints << " source points\n";
         dstPoints.clear();
         settings.pushTag("destination");
         numberOfSavedPoints = settings.getNumTags("point");
@@ -189,12 +209,24 @@ void offsetCurve::readSession(string filePath){
             settings.popTag();
         }
         settings.popTag(); //pop position
-        cout << "\t" << numberOfSavedPoints << " destination points\n";
+        tweaks.clear();
+        if(settings.tagExists("tweaks")){
+            settings.pushTag("tweaks");
+            for(int i = 0; i < image.getWidth(); i++){
+                tweaks.push_back(settings.getValue("tweak"+to_string(i), 666));
+            }
+            settings.popTag(); //pop position
+        }else{
+            for(int i = 0; i< image.getWidth(); i++)
+                tweaks.push_back(0);
+            
+        }
     }
     else{
         ofLogError("Position file did not load!");
     }
     updatePathFromPoints();
+    cout << "Loaded session file: \n\t" << sessionFile << "\nwith image file: \n\t" << imageFilePath << "\n------------------\n";
 }
 
 void offsetCurve::newSession(){
@@ -271,20 +303,80 @@ float offsetCurve::getOffsetFromIndex(int index){
 //
 //--------------------------------------------------------------
 void ofApp::setup(){
-    //openSessionRequester();
-    session.setSessionFile("/Users/hollt054/Desktop/IMG_0968.xml");
-    session.readSession();
-    loadImageAndBuildScanlines();
+    newSessionRequester();
 
     selectedPoint = -1;
     mode = MOVE;
-    DRAWOFFSET = true;
-    DRAWCURVES = true;
+
+    gui.setup();
+    gui.add(paramsFile.setup("file"));
+    paramsFile.setName("file");
+    paramsFile.add(_new.setup("new (n)"));
+    paramsFile.add(_open.setup("open (o)"));
+    paramsFile.add(_save.setup("save (s)"));
+    
+    paramsEdit.setName("edit");
+    _move.setName("move canvas (m)");
+    _edit.setName("edit point (e)");
+    _insert.setName("insert point (i)");
+    _remove.setName("remove point (r)");
+    _move.set(1);
+    paramsEdit.add(_move);
+    paramsEdit.add(_edit);
+    paramsEdit.add(_insert);
+    paramsEdit.add(_remove);
+    gui.add(paramsEdit);
+
+    gui.add(paramsShow.setup("show"));
+    paramsShow.setName("show");
+    paramsShow.add(_showCurves.setup("curves (c)",true));
+    paramsShow.add(_showOffset.setup("offset (space bar)",true));
+    paramsShow.add(_showMenu.setup("gui (g)",true));
+    
+    _new.addListener(this, &ofApp::newClicked);
+    _open.addListener(this, &ofApp::openClicked);
+    _save.addListener(this, &ofApp::saveClicked);
+    ofAddListener(paramsEdit.parameterChangedE(), this, &ofApp::paramModeChangedEvent);
+
+}
+
+void ofApp::paramModeChangedEvent(ofAbstractParameter &e){
+    string name = e.getName();
+    
+    _move.disableEvents();
+    _edit.disableEvents();
+    _insert.disableEvents();
+    _remove.disableEvents();
+    _move.set((name.compare(0,4,"move",0,4)== 0));
+    _edit.set((name.compare(0,4,"edit",0,4)== 0));
+    _insert.set((name.compare(0,6,"insert",0,6)== 0));
+    _remove.set((name.compare(0,6,"remove",0,6)== 0));
+    if(name.compare(0,4,"move",0,4)== 0)mode=MOVE;
+    if(name.compare(0,4,"edit",0,4)== 0)mode=EDIT;
+    if(name.compare(0,6,"insert",0,6)== 0)mode=INSERT;
+    if(name.compare(0,6,"remove",0,6)== 0)mode=REMOVE;
+    _move.enableEvents();
+    _edit.enableEvents();
+    _insert.enableEvents();
+    _remove.enableEvents();
+
+}
+
+void ofApp::newClicked(){
+    newSessionRequester();
+}
+
+void ofApp::openClicked(){
+    openSessionRequester();
+}
+
+void ofApp::saveClicked(){
+    session.saveSession();
 }
 
 //--------------------------------------------------------------
 void ofApp::update(){
-    if(DRAWOFFSET){
+    if(_showOffset){
         for(int i=0; i<planes.size(); i++){
             float x = planes[i].getPosition().x;
             float y = session.getOffsetFromIndex(i);
@@ -307,7 +399,7 @@ void ofApp::update(){
         case INSERT:
             myCanvas.enableMouseInput(false);
             break;
-        case DELETE:
+        case REMOVE:
             myCanvas.enableMouseInput(false);
             break;
     }
@@ -324,12 +416,17 @@ void ofApp::draw(){
     session.image.unbind();
     session.dstPath.setColor(0);
     ofSetColor(ofColor(255,255,100,128));
-    if(DRAWCURVES){
+    if(_showCurves){
         session.draw();
         session.drawOffsets();
     }
     myCanvas.end();
     ofSetColor(ofColor(255));
+
+    if(_showMenu){
+        gui.draw();
+    }
+
 }
 
 void ofApp::loadImageAndBuildScanlines(){
@@ -369,25 +466,24 @@ void ofApp::openSessionRequester(){
         ofLogVerbose("User selected a file");
         
         //We have a file, check it and process it
-        session.sessionFile = openFileResult.getPath();
+        session.readSession(openFileResult.getPath());
     }else {
         ofLogVerbose("User hit cancel");
     }
+    loadImageAndBuildScanlines();
 }
 
 //--------------------------------------------------------------
 void ofApp::newSessionRequester(){
     ofFileDialogResult openFileResult= ofSystemLoadDialog("select image file");
     if (openFileResult.bSuccess){
-        
         ofLogVerbose("User selected a file");
-        
         //We have a file, check it and process it
-        session.imageFilePath = openFileResult.getPath();
-        session.init(session.imageFilePath);
+        session.init(openFileResult.getPath());
     }else {
         ofLogVerbose("User hit cancel");
     }
+    loadImageAndBuildScanlines();
 }
 
 //--------------------------------------------------------------
@@ -429,22 +525,42 @@ void ofApp::keyReleased(int key){
             break;
         case ',':
             switch (mode){
-                case MOVE: mode=EDIT;break;
-                case EDIT: mode=INSERT;break;
-                case INSERT: mode=DELETE;break;
-                case DELETE: mode=MOVE;break;
+                case MOVE: mode=EDIT;_edit.set(1);break;
+                case EDIT: mode=INSERT;_insert.set(1);break;
+                case INSERT: mode=REMOVE;_remove.set(1);break;
+                case REMOVE: mode=MOVE;_move.set(1);break;
             }
             break;
+        case 'm':
+            mode=MOVE;_move.set(1);
+            break;
+        case 'e':
+            mode=EDIT;_edit.set(1);
+            break;
+        case 'i':
+            mode=INSERT;_insert.set(1);
+            break;
+        case 'r':
+            mode=REMOVE;_remove.set(1);
+            break;
         case 's':
-            session.saveSession("/tmp/poo.xml", imageFile);
-        case 'a':
-            session.readSession("/tmp/poo.xml");
+            session.saveSession();
+            break;
+        case 'o':
+            openSessionRequester();
+            break;
         case 'n':
-            session.newSession();
+            newSessionRequester();
+            break;
+        case 'c':
+            _showCurves = !_showCurves;
+            break;
         case ' ':
-            DRAWOFFSET = !DRAWOFFSET;
-        case 'h':
-            DRAWCURVES = !DRAWCURVES;
+            _showOffset = !_showOffset;
+            break;
+        case 'g':
+            _showMenu = !_showMenu;
+            break;
     }
     myCanvas.end();
     
@@ -472,7 +588,7 @@ void ofApp::mousePressed(int x, int y, int button){
         session.insertP(myCanvas.screenToWorld(ofPoint(x,y)));
         session.updatePathFromPoints();
         session.createOffsets();
-    }else if(mode == DELETE){
+    }else if(mode == REMOVE){
         session.selectP(myCanvas.screenToWorld(ofPoint(x,y)));
         session.deleteSelectedP();
         session.updatePathFromPoints();
@@ -484,8 +600,8 @@ void ofApp::mousePressed(int x, int y, int button){
 void ofApp::mouseReleased(int x, int y, int button){
     if(mode == EDIT || mode == INSERT){
         session.updatePointsFromPath();
-        session.updatePointsFromPath();
         session.createOffsets();
+        session.selectedP = -1;
         cout << "released\n";
     }
 }

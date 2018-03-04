@@ -1,3 +1,4 @@
 ofxGui
+ofxGuiExtended
 ofxInfiniteCanvas
 ofxXmlSettings
