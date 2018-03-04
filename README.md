@@ -6,11 +6,13 @@ Move the y location of an image along a source curve to align with a destination
 There is a gui to help you.
 
 Getting started:
--run the app
--when it opens, select "new"
--select a slit scan image and load it.
--you will see two curves drawn on it, one flat, one wiggly
--press the space bar and see the y location at the wiggly curve align to the straight line.
--press "save"
--an .xml file will be created next to your image, same name but with xml extention
--press "open" to load an existing xml file. It will contain a reference to the original image as well as the curve info.
+<li>
+<ul>-run the app</ul>
+<ul>-when it opens, select "new"</ul>
+<ul>-select a slit scan image and load it.</ul>
+<ul>-you will see two curves drawn on it, one flat, one wiggly</ul>
+<ul>-press the space bar and see the y location at the wiggly curve align to the straight line.</ul>
+<ul>-press "save"</ul>
+<ul>-an .xml file will be created next to your image, same name but with xml extention</ul>
+<ul>-press "open" to load an existing xml file. It will contain a reference to the original image as well as the curve info.</ul>
+</li>
