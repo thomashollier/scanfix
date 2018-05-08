@@ -11,24 +11,21 @@ public:
     
     void init(string);
     
-    vector <ofPoint> srcPoints;
-    vector <ofPoint> dstPoints;
-    vector<float> tweaks;
-    
     ofPath srcPath;
     ofPath dstPath;
-    string imageFilePath;
-    string sessionFile;
+    vector <ofPoint> srcPoints;
+    vector <ofPoint> dstPoints;
     vector <ofPoint> srcPolyline;
     vector <ofPoint> dstPolyline;
 
+    vector<float> tweaks;
     
     void srcPrint();
     void dstPrint();
 
     void updatePathFromPoints();
     void updatePointsFromPath();
-
+    
     int selectedP;
     void selectP(ofPoint p);
     void deselectP();
@@ -38,22 +35,31 @@ public:
     
     void draw();
 
-    ofImage image;
-    string getImage();
+    ofImage inputImage;
+    string inputImagePath;
+    string sessionXMLPath;
+    string outputImagePath;
+
+    string getInputImagePath();
+    string getOutputImagePath();
 
     void saveSession();
-    //void saveSession(string filePath, string imagePath);
     void readSession(string filePath);
     void readSession();
     void newSession();
     void processNewFileSelection(ofFileDialogResult);
     void processOpenFileSelection(ofFileDialogResult);
-    void setSessionFile(string f);
-
+    
     void createOffsets();
     float getOffsetFromIndex(int index);
-    
+    float getMinOffset();
+    float getMaxOffset();
+
     void drawOffsets();
+    
+    float minOffset;
+    float maxOffset;
+
 };
 
 
@@ -90,6 +96,9 @@ public:
     vector<ofPlanePrimitive> planes;
     ofImage image;
     ofxInfiniteCanvas myCanvas;
+    ofxInfiniteCanvas bgCanvas;
+    ofFbo bgFbo;
+    void saveBgFbo();
     
     offsetCurve session;
     

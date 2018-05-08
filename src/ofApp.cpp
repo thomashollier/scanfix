@@ -4,25 +4,25 @@ offsetCurve::offsetCurve(){
 }
 
 void offsetCurve::init(string imagePath){
-    imageFilePath = imagePath;
-    image.load(imagePath);
-    image.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
+    inputImagePath = imagePath;
+    inputImage.load(imagePath);
+    inputImage.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
 
-    // create session file
-    sessionFile = imageFilePath;
-    string::size_type i = sessionFile.rfind('.', sessionFile.length());
+    // create session file path
+    sessionXMLPath = inputImagePath;
+    string::size_type i = sessionXMLPath.rfind('.', sessionXMLPath.length());
     string newExt = "xml";
     if (i != string::npos) {
-        sessionFile.replace(i+1, newExt.length(), newExt);
+        sessionXMLPath.replace(i+1, newExt.length(), newExt);
     }
     
-    for(int i = 0; i< image.getWidth(); i++)
+    for(int i = 0; i< inputImage.getWidth(); i++)
         tweaks.push_back(0);
     
-    float x = -image.getWidth()/2;
+    float x = -inputImage.getWidth()/2;
     float y=0;
     int n = 8;
-    int step = image.getWidth()/n;
+    int step = inputImage.getWidth()/n;
 
     srcPoints.clear();
     dstPoints.clear();
@@ -39,7 +39,7 @@ void offsetCurve::draw(){
     srcPath.draw();
     for(int i=1; i< dstPath.getCommands().size(); i++){
         ofPoint p = dstPath.getCommands()[i].to;
-        ofDrawCircle(p, 3);
+        ofDrawCircle(p, 8);
     }
 
 }
@@ -124,9 +124,21 @@ void offsetCurve::deleteSelectedP(){
     dstPoints.erase(dstPoints.begin()+(selectedP-1));
 }
 
-string offsetCurve::getImage(){
-    return imageFilePath;
+string offsetCurve::getInputImagePath(){
+    return inputImagePath;
 }
+
+string offsetCurve::getOutputImagePath(){
+    outputImagePath = inputImagePath;
+    int i = outputImagePath.rfind('.', outputImagePath.length());
+    string newExt = "-fixed.png";
+    if (i != string::npos) {
+        outputImagePath.replace(i, newExt.length(), newExt);
+    }
+    return outputImagePath;
+}
+
+
 
 //--------------------------------------------------------------
 void offsetCurve::saveSession(){
@@ -134,7 +146,7 @@ void offsetCurve::saveSession(){
     ofxXmlSettings positions;
     positions.addTag("image");
     positions.pushTag("image");
-    positions.addValue("path", imageFilePath);
+    positions.addValue("path", inputImagePath);
     positions.popTag();
     positions.addTag("source");
     positions.pushTag("source");
@@ -167,25 +179,25 @@ void offsetCurve::saveSession(){
     for(int i = 0; i<tweaks.size(); i++)
         positions.addValue("tweak"+to_string(i), tweaks[i]);
     positions.popTag();//pop position
-    positions.saveFile(sessionFile);
+    positions.saveFile(sessionXMLPath);
     
     
-    cout << "Saved session file: \n\t" << sessionFile << "\nwith image file: \n\t" << imageFilePath << "\n------------------\n";
+    cout << "Saved session file: \n\t" << sessionXMLPath << "\nwith image file: \n\t" << inputImagePath << "\n------------------\n";
 }
 
 void offsetCurve::readSession(){
-    readSession(sessionFile);
+    readSession(sessionXMLPath);
 }
 
 void offsetCurve::readSession(string filePath){
     cout << "------------ Reading session --\n";
-    sessionFile = filePath;
+    sessionXMLPath = filePath;
     ofxXmlSettings settings;
     if(settings.loadFile(filePath)){
         settings.pushTag("image");
-        imageFilePath = settings.getValue("path", "foo");
-        image.load(imageFilePath);
-        image.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
+        inputImagePath = settings.getValue("path", "foo");
+        inputImage.load(inputImagePath);
+        inputImage.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
         settings.popTag();
         srcPoints.clear();
         settings.pushTag("source");
@@ -212,12 +224,12 @@ void offsetCurve::readSession(string filePath){
         tweaks.clear();
         if(settings.tagExists("tweaks")){
             settings.pushTag("tweaks");
-            for(int i = 0; i < image.getWidth(); i++){
+            for(int i = 0; i < inputImage.getWidth(); i++){
                 tweaks.push_back(settings.getValue("tweak"+to_string(i), 666));
             }
             settings.popTag(); //pop position
         }else{
-            for(int i = 0; i< image.getWidth(); i++)
+            for(int i = 0; i< inputImage.getWidth(); i++)
                 tweaks.push_back(0);
             
         }
@@ -226,7 +238,7 @@ void offsetCurve::readSession(string filePath){
         ofLogError("Position file did not load!");
     }
     updatePathFromPoints();
-    cout << "Loaded session file: \n\t" << sessionFile << "\nwith image file: \n\t" << imageFilePath << "\n------------------\n";
+    cout << "Loaded session file: \n\t" << sessionXMLPath << "\nwith image file: \n\t" << inputImagePath << "\n------------------\n";
 }
 
 void offsetCurve::newSession(){
@@ -250,10 +262,6 @@ void offsetCurve::processNewFileSelection(ofFileDialogResult openFileResult){
     cout << openFileResult.getPath() << "\n";
 }
 
-void offsetCurve::setSessionFile(string f){
-    sessionFile = f;
-}
-
 void offsetCurve::createOffsets(){
     ofPolyline srcTmpPolyline, dstTmpPolyline;
     for(int i=0;i<dstPoints.size(); i++){
@@ -263,6 +271,8 @@ void offsetCurve::createOffsets(){
     }
     srcPolyline.clear();
     dstPolyline.clear();
+    minOffset = 100000;
+    maxOffset = -100000;
 
     float length = srcTmpPolyline.getLengthAtIndex(srcTmpPolyline.getVertices().size()+1);
     float numSamples = length;
@@ -278,6 +288,12 @@ void offsetCurve::createOffsets(){
         }else{
             srcPolyline.push_back(ofPoint(pp2.x, 0));
             dstPolyline.push_back(ofPoint(pp2.x, pp2.y));
+        }
+        if (pp2.y < minOffset){
+            minOffset = pp2.y;
+        }
+        if (pp2.y > maxOffset){
+            maxOffset = pp2.y;
         }
     }
 }
@@ -297,6 +313,14 @@ float offsetCurve::getOffsetFromIndex(int index){
     return -dstPolyline[index].y;
 }
 
+float offsetCurve::getMinOffset(){
+    return minOffset;
+}
+
+float offsetCurve::getMaxOffset(){
+    return maxOffset;
+}
+
 //--------------------------------------------------------------
 //
 //  MAIN APP
@@ -306,6 +330,7 @@ void ofApp::setup(){
 
     selectedPoint = -1;
     mode = MOVE;
+
 
     gui.setup();
     gui.add(paramsFile.setup("file"));
@@ -336,7 +361,6 @@ void ofApp::setup(){
     _open.addListener(this, &ofApp::openClicked);
     _save.addListener(this, &ofApp::saveClicked);
     ofAddListener(paramsEdit.parameterChangedE(), this, &ofApp::paramModeChangedEvent);
-
 }
 
 void ofApp::paramModeChangedEvent(ofAbstractParameter &e){
@@ -406,13 +430,13 @@ void ofApp::update(){
 
 //--------------------------------------------------------------
 void ofApp::draw(){
-    session.image.bind();
+    session.inputImage.bind();
     myCanvas.begin();
-    int n = session.image.getWidth(); // loop total
+    int n = session.inputImage.getWidth(); // loop total
     for(int i = 0; i< n; i++){
         planes[i].draw();
     }
-    session.image.unbind();
+    session.inputImage.unbind();
     session.dstPath.setColor(0);
     ofSetColor(ofColor(255,255,100,128));
     if(_showCurves){
@@ -420,20 +444,25 @@ void ofApp::draw(){
         session.drawOffsets();
     }
     myCanvas.end();
+    
     ofSetColor(ofColor(255));
 
     if(_showMenu){
         gui.draw();
     }
+    
+    float verticalCameraOffset = session.inputImage.getHeight()*0.5 + session.getMaxOffset();
+    bgCanvas.setTranslation(ofVec3f(session.inputImage.getWidth()*.5,verticalCameraOffset,0));
+    bgCanvas.setScale(1);
 
 }
 
 void ofApp::loadImageAndBuildScanlines(){
     planes.clear();
-    int n = session.image.getWidth();
-    int w = session.image.getWidth();
-    int h = session.image.getHeight();
-    session.image.getTexture().disableAlphaMask();
+    int n = session.inputImage.getWidth();
+    int w = session.inputImage.getWidth();
+    int h = session.inputImage.getHeight();
+    session.inputImage.getTexture().disableAlphaMask();
     int gap = 0;
     for(int i = 0; i< n; i++){
         planes.push_back(ofPlanePrimitive(1, h, 2, 2));
@@ -441,6 +470,8 @@ void ofApp::loadImageAndBuildScanlines(){
         planes[i].mapTexCoords(i*w/n, 0, (i+1)*w/n, h);
     }
     session.createOffsets();
+    float fboHeight = session.inputImage.getHeight() + (session.getMaxOffset() - session.getMinOffset());
+    bgFbo.allocate(session.inputImage.getWidth(), fboHeight, GL_RGB);
 }
 
 void ofApp::zoom(float newScale){
@@ -483,6 +514,35 @@ void ofApp::newSessionRequester(){
         ofLogVerbose("User hit cancel");
     }
     loadImageAndBuildScanlines();
+}
+
+
+
+void ofApp::saveBgFbo(){
+    std::cout << "------------ Saving image --\n"<< session.outputImagePath << "\n";
+
+    bgFbo.begin();
+        ofClear(255,255,255, 0);
+        session.inputImage.bind();
+        bgCanvas.begin();
+            int n = session.inputImage.getWidth(); // loop total
+            for(int i = 0; i< n; i++){
+                planes[i].draw();
+            }
+            session.inputImage.unbind();
+            session.dstPath.setColor(0);
+        bgCanvas.end();
+    bgFbo.end();
+    
+    
+    ofPixels p;
+    float fboHeight = session.inputImage.getHeight() + (session.getMaxOffset() - session.getMinOffset());
+    p.allocate(session.inputImage.getWidth() , fboHeight, OF_IMAGE_COLOR_ALPHA);
+    bgFbo.readToPixels(p,0);
+    std::cout << session.getOutputImagePath(); "\n";
+    ofSaveImage(p,session.outputImagePath);
+    
+    std::cout << "------------- done ---\n";
 }
 
 //--------------------------------------------------------------
@@ -559,6 +619,9 @@ void ofApp::keyReleased(int key){
             break;
         case 'g':
             _showMenu = !_showMenu;
+            break;
+        case 'j':
+            saveBgFbo();
             break;
     }
     myCanvas.end();
