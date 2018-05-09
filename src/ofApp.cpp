@@ -363,7 +363,6 @@ void ofApp::setup(){
     ofAddListener(paramsEdit.parameterChangedE(), this, &ofApp::paramModeChangedEvent);
 }
 
-
 void ofApp::paramModeChangedEvent(ofAbstractParameter &e){
     string name = e.getName();
     
