@@ -62,7 +62,6 @@ public:
 
 };
 
-
 class ofApp : public ofBaseApp{
 
 public:
